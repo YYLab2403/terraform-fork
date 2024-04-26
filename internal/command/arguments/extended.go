@@ -120,6 +120,29 @@ func (o *Operation) Parse() tfdiags.Diagnostics {
 		o.Targets = append(o.Targets, target.Subject)
 	}
 
+	for _, tr := range o.excludesRaw {
+		traversal, syntaxDiags := hclsyntax.ParseTraversalAbs([]byte(tr), "", hcl.Pos{Line: 1, Column: 1})
+		if syntaxDiags.HasErrors() {
+			diags = diags.Append(tfdiags.Sourceless(
+				tfdiags.Error,
+				fmt.Sprintf("Invalid target %q", tr),
+				syntaxDiags[0].Detail,
+			))
+			continue
+		}
+
+		target, targetDiags := addrs.ParseTarget(traversal)
+		if targetDiags.HasErrors() {
+			diags = diags.Append(tfdiags.Sourceless(
+				tfdiags.Error,
+				fmt.Sprintf("Invalid target %q", tr),
+				targetDiags[0].Description().Detail,
+			))
+			continue
+		}
+
+		o.Targets = append(o.Targets, target.Subject)
+	}
 	for _, raw := range o.forceReplaceRaw {
 		traversal, syntaxDiags := hclsyntax.ParseTraversalAbs([]byte(raw), "", hcl.Pos{Line: 1, Column: 1})
 		if syntaxDiags.HasErrors() {
