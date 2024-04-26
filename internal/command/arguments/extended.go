@@ -175,6 +175,13 @@ func (o *Operation) Parse() tfdiags.Diagnostics {
 
 		o.ForceReplace = append(o.ForceReplace, addr)
 	}
+	if len(o.targetsRaw) > 0 && len(o.excludesRaw) > 0 {
+		diags = diags.Append(tfdiags.Sourceless(
+			tfdiags.Error,
+			"-target and -exclude can't be coexistence",
+			fmt.Sprintf("-target length is %d, -exclude length is %d", len(o.targetsRaw), len(o.excludesRaw)),
+		))
+	}
 
 	// If you add a new possible value for o.PlanMode here, consider also
 	// adding a specialized error message for it in ParseApplyDestroy.
