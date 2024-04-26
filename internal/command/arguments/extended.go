@@ -82,6 +82,7 @@ type Operation struct {
 	// method Parse to populate the exported fields from these, validating
 	// the raw values in the process.
 	targetsRaw      []string
+	excludesRaw     []string
 	forceReplaceRaw []string
 	destroyRaw      bool
 	refreshOnlyRaw  bool
@@ -119,6 +120,29 @@ func (o *Operation) Parse() tfdiags.Diagnostics {
 		o.Targets = append(o.Targets, target.Subject)
 	}
 
+	for _, tr := range o.excludesRaw {
+		traversal, syntaxDiags := hclsyntax.ParseTraversalAbs([]byte(tr), "", hcl.Pos{Line: 1, Column: 1})
+		if syntaxDiags.HasErrors() {
+			diags = diags.Append(tfdiags.Sourceless(
+				tfdiags.Error,
+				fmt.Sprintf("Invalid target %q", tr),
+				syntaxDiags[0].Detail,
+			))
+			continue
+		}
+
+		target, targetDiags := addrs.ParseTarget(traversal)
+		if targetDiags.HasErrors() {
+			diags = diags.Append(tfdiags.Sourceless(
+				tfdiags.Error,
+				fmt.Sprintf("Invalid target %q", tr),
+				targetDiags[0].Description().Detail,
+			))
+			continue
+		}
+
+		o.Targets = append(o.Targets, target.Subject)
+	}
 	for _, raw := range o.forceReplaceRaw {
 		traversal, syntaxDiags := hclsyntax.ParseTraversalAbs([]byte(raw), "", hcl.Pos{Line: 1, Column: 1})
 		if syntaxDiags.HasErrors() {
@@ -150,6 +174,13 @@ func (o *Operation) Parse() tfdiags.Diagnostics {
 		}
 
 		o.ForceReplace = append(o.ForceReplace, addr)
+	}
+	if len(o.targetsRaw) > 0 && len(o.excludesRaw) > 0 {
+		diags = diags.Append(tfdiags.Sourceless(
+			tfdiags.Error,
+			"-target and -exclude can't be coexistence",
+			fmt.Sprintf("-target length is %d, -exclude length is %d", len(o.targetsRaw), len(o.excludesRaw)),
+		))
 	}
 
 	// If you add a new possible value for o.PlanMode here, consider also
@@ -227,6 +258,7 @@ func extendedFlagSet(name string, state *State, operation *Operation, vars *Vars
 		f.BoolVar(&operation.destroyRaw, "destroy", false, "destroy")
 		f.BoolVar(&operation.refreshOnlyRaw, "refresh-only", false, "refresh-only")
 		f.Var((*flagStringSlice)(&operation.targetsRaw), "target", "target")
+		f.Var((*flagStringSlice)(&operation.excludesRaw), "exclude", "exclude")
 		f.Var((*flagStringSlice)(&operation.forceReplaceRaw), "replace", "replace")
 	}
 
